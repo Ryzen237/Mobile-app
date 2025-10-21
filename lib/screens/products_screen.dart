@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_staggered_animations/flutter_staggered_animations.dart';
 import '../providers/app_state.dart';
+import '../services/storage_service.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'cart_screen.dart';
 
 class ProductsScreen extends StatefulWidget {
@@ -33,10 +35,26 @@ class _ProductsScreenState extends State<ProductsScreen> {
 
     try {
       final appState = Provider.of<AppState>(context, listen: false);
-      _allProducts = await appState.databaseService.getAllProducts();
-      _categories = await appState.databaseService.getCategories();
-      _categories.insert(0, 'Tous'); // Ajouter l'option "Tous"
-      _filteredProducts = _allProducts;
+
+      if (kIsWeb) {
+        // Use StorageService for web
+        final storageService = StorageService();
+        _allProducts = await storageService.getAllProducts();
+        _categories = await storageService.getCategories();
+        _categories.insert(0, 'Tous');
+        _filteredProducts = _allProducts;
+      } else {
+        // Use DatabaseService for mobile
+        try {
+          _allProducts = await appState.databaseService.getAllProducts();
+          _categories = await appState.databaseService.getCategories();
+          _categories.insert(0, 'Tous');
+          _filteredProducts = _allProducts;
+        } catch (e) {
+          print('Erreur base de données mobile: $e');
+          _loadDemoProducts();
+        }
+      }
     } catch (e) {
       print('Erreur lors du chargement des produits: $e');
       _loadDemoProducts();

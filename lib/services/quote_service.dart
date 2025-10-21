@@ -60,7 +60,7 @@ class QuoteService {
 
   // Méthode pour formater le prix en euros
   String formatPrice(double price) {
-    return '${price.toStringAsFixed(2)}€';
+    return '${price.toStringAsFixed(2)}FCFA';
   }
 
   // Méthode pour générer un ID unique pour le devis (simulé)

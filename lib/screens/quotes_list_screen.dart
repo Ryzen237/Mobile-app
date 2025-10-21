@@ -2,20 +2,19 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import 'package:intl/date_symbol_data_local.dart';
-import 'package:async/async.dart';
-import '../models/order.dart';
+import '../models/quote.dart';
 import '../models/user.dart';
 import '../providers/app_state.dart';
-import 'order_screen.dart';
+import 'quote_screen.dart';
 
-class OrdersListScreen extends StatefulWidget {
-  const OrdersListScreen({super.key});
+class QuotesListScreen extends StatefulWidget {
+  const QuotesListScreen({super.key});
 
   @override
-  State<OrdersListScreen> createState() => _OrdersListScreenState();
+  State<QuotesListScreen> createState() => _QuotesListScreenState();
 }
 
-class _OrdersListScreenState extends State<OrdersListScreen> {
+class _QuotesListScreenState extends State<QuotesListScreen> {
   bool _isLoading = false;
   String? _errorMessage;
 
@@ -23,7 +22,7 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
   void initState() {
     super.initState();
 
-    // Initialize date formatting and load orders after the first frame
+    // Initialize date formatting and load quotes after the first frame
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       try {
         // Initialize date formatting for French locale
@@ -33,17 +32,11 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
         print('Erreur lors de l\'initialisation du formatage des dates: $e');
       }
 
-      // Load orders after date formatting is ready
-      _loadOrders();
+      _loadQuotes();
     });
   }
 
-  Future<void> _loadOrders() async {
-    // Prevent multiple simultaneous loading operations
-    if (_isLoading) return;
-
-    if (!mounted) return;
-
+  Future<void> _loadQuotes() async {
     setState(() {
       _isLoading = true;
       _errorMessage = null;
@@ -52,113 +45,38 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
     try {
       final appState = Provider.of<AppState>(context, listen: false);
 
-      print('Début du chargement des commandes...');
-
-      // Ensure we have a current user
+      // Vérifier si l'utilisateur actuel est défini
       if (appState.currentUser == null) {
-        print('Aucun utilisateur actuel, tentative de récupération...');
+        print('Aucun utilisateur actuel, tentative de chargement...');
         await _ensureUserExists(appState);
       }
 
-      // Double-check user exists
-      if (appState.currentUser == null) {
-        print('Échec de récupération utilisateur, création d\'un utilisateur de secours');
-        await _createFallbackUser(appState);
-      }
-
-      if (appState.currentUser != null) {
-        print('Chargement des données pour l\'utilisateur: ${appState.currentUser!.id}');
-
-        // Load user data with error protection
-        try {
-          await appState.loadUserData();
-        } catch (e) {
-          print('Erreur lors du chargement des données utilisateur: $e');
-          // Continue with fallback loading
-        }
-
-        print('Données chargées: ${appState.orders.length} commandes, ${appState.quotes.length} devis');
-
-        // Refresh UI if no data loaded
-        if (appState.orders.isEmpty && mounted) {
-          print('Aucune commande trouvée, rechargement...');
-          await _forceReloadData(appState);
-        }
-      } else {
-        print('Impossible de charger les données: aucun utilisateur');
-        if (mounted) {
-          setState(() {
-            _errorMessage = 'Aucun utilisateur connecté';
-          });
-        }
-      }
-
-    } catch (e) {
-      print('Erreur lors du chargement des commandes: $e');
-      if (mounted) {
-        setState(() {
-          _errorMessage = 'Erreur lors du chargement: ${e.toString()}';
-        });
-      }
-
-      // Try to recover with fallback data
-      await _attemptRecovery();
-
-    } finally {
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
-    }
-  }
-
-  Future<void> _forceReloadData(AppState appState) async {
-    try {
-      print('Rechargement forcé des données...');
+      // Charger les données utilisateur
       await appState.loadUserData();
 
-      if (appState.orders.isEmpty && mounted) {
+      // Si toujours pas de données, essayer de charger tous les devis comme fallback
+      if (appState.quotes.isEmpty && appState.currentUser != null) {
+        print('Aucun devis trouvé pour l\'utilisateur, chargement de tous les devis...');
         try {
-          final allOrders = await appState.databaseService.getAllOrders();
-          if (allOrders.isNotEmpty && mounted) {
-            // Mettre à jour les commandes dans l'état global
-            appState.updateOrders(allOrders);
+          final allQuotes = await appState.databaseService.getAllQuotes();
+          if (allQuotes.isNotEmpty && mounted) {
+            // Mettre à jour les devis dans l'état global
+            appState.updateQuotes(allQuotes);
           }
         } catch (e) {
           print('Erreur lors du chargement fallback: $e');
         }
       }
+
     } catch (e) {
-      print('Erreur lors du rechargement forcé: $e');
-    }
-  }
-
-  Future<void> _attemptRecovery() async {
-    try {
-      print('Tentative de récupération...');
-      final appState = Provider.of<AppState>(context, listen: false);
-
-      // Try to load any available data
-      if (appState.currentUser != null) {
-        await appState.loadUserData();
+      print('Erreur lors du chargement des devis: $e');
+      setState(() {
+        _errorMessage = 'Erreur lors du chargement: $e';
+      });
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
       }
-    } catch (e) {
-      print('Échec de récupération: $e');
-    }
-  }
-
-  Future<void> _createFallbackUser(AppState appState) async {
-    try {
-      final fallbackUser = User(
-        id: 'FALLBACK_USER_${DateTime.now().millisecondsSinceEpoch}',
-        name: 'Utilisateur',
-        email: 'fallback@exemple.com',
-        createdAt: DateTime.now(),
-      );
-
-      appState.setCurrentUser(fallbackUser);
-      print('Utilisateur de secours créé: ${fallbackUser.email}');
-    } catch (e) {
-      print('Erreur lors de la création de l\'utilisateur de secours: $e');
     }
   }
 
@@ -193,7 +111,7 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Mes commandes'),
+        title: const Text('Mes devis'),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
           onPressed: () => Navigator.of(context).pop(),
@@ -201,7 +119,7 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            onPressed: _loadOrders,
+            onPressed: _loadQuotes,
             tooltip: 'Actualiser',
           ),
         ],
@@ -215,7 +133,7 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
                 children: [
                   CircularProgressIndicator(),
                   SizedBox(height: 16),
-                  Text('Chargement des commandes...'),
+                  Text('Chargement des devis...'),
                 ],
               ),
             );
@@ -253,7 +171,7 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
                   ),
                   const SizedBox(height: 16),
                   ElevatedButton(
-                    onPressed: _loadOrders,
+                    onPressed: _loadQuotes,
                     child: const Text('Réessayer'),
                   ),
                 ],
@@ -261,19 +179,19 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
             );
           }
 
-          if (appState.orders.isEmpty) {
+          if (appState.quotes.isEmpty) {
             return Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   const Icon(
-                    Icons.shopping_bag_outlined,
+                    Icons.request_quote_outlined,
                     size: 64,
                     color: Colors.grey,
                   ),
                   const SizedBox(height: 16),
                   Text(
-                    'Aucune commande trouvée',
+                    'Aucun devis trouvé',
                     style: TextStyle(
                       fontSize: 18,
                       color: Colors.grey[600],
@@ -281,7 +199,7 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Créez votre première commande depuis l\'écran "Catalogue"',
+                    'Créez votre premier devis depuis l\'écran "Faire un devis"',
                     style: TextStyle(
                       fontSize: 14,
                       color: Colors.grey[500],
@@ -292,11 +210,11 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
                   ElevatedButton.icon(
                     onPressed: () {
                       Navigator.of(context).push(
-                        MaterialPageRoute(builder: (context) => const OrderScreen()),
+                        MaterialPageRoute(builder: (context) => const QuoteScreen()),
                       );
                     },
                     icon: const Icon(Icons.add),
-                    label: const Text('Créer une commande'),
+                    label: const Text('Créer un devis'),
                   ),
                 ],
               ),
@@ -304,16 +222,16 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
           }
 
           return ListView.builder(
-            itemCount: appState.orders.length,
+            itemCount: appState.quotes.length,
             itemBuilder: (context, index) {
               try {
-                final order = appState.orders[index];
-                if (order == null) {
-                  return const SizedBox.shrink(); // Skip null orders
+                final quote = appState.quotes[index];
+                if (quote == null) {
+                  return const SizedBox.shrink();
                 }
-                return OrderCard(order: order);
+                return QuoteCard(quote: quote);
               } catch (e) {
-                print('Erreur lors de l\'affichage de la commande $index: $e');
+                print('Erreur lors de l\'affichage du devis $index: $e');
                 return Container(
                   margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   padding: const EdgeInsets.all(16),
@@ -323,7 +241,7 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
                     border: Border.all(color: Colors.red.shade200),
                   ),
                   child: const Text(
-                    'Erreur d\'affichage de cette commande',
+                    'Erreur d\'affichage de ce devis',
                     style: TextStyle(color: Colors.red),
                   ),
                 );
@@ -336,20 +254,15 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
   }
 }
 
-class OrderCard extends StatelessWidget {
-  final Order order;
+class QuoteCard extends StatelessWidget {
+  final Quote quote;
 
-  const OrderCard({super.key, required this.order});
+  const QuoteCard({super.key, required this.quote});
 
   @override
   Widget build(BuildContext context) {
     try {
       final dateFormat = DateFormat('dd/MM/yyyy HH:mm', 'fr_FR');
-
-      // Vérifications de sécurité
-      if (order.id.isEmpty) {
-        return const SizedBox.shrink();
-      }
 
       return Card(
         margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -362,23 +275,25 @@ class OrderCard extends StatelessWidget {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(
-                    'Commande #${order.id.substring(0, order.id.length > 8 ? 8 : order.id.length)}',
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
+                  Expanded(
+                    child: Text(
+                      quote.clientName,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 18,
+                      ),
                     ),
                   ),
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
-                      color: Colors.green.shade100,
+                      color: Colors.blue.shade100,
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    child: const Text(
-                      'En attente',
+                    child: Text(
+                      'Devis',
                       style: TextStyle(
-                        color: Colors.green,
+                        color: Colors.blue.shade800,
                         fontSize: 12,
                         fontWeight: FontWeight.bold,
                       ),
@@ -388,67 +303,45 @@ class OrderCard extends StatelessWidget {
               ),
               const SizedBox(height: 8),
               Text(
-                'Date: ${dateFormat.format(order.date)}',
+                'Produit: ${quote.product}',
                 style: TextStyle(
                   color: Colors.grey[600],
                   fontSize: 14,
                 ),
               ),
-              if (order.customerName != null && order.customerName!.isNotEmpty) ...[
-                const SizedBox(height: 4),
-                Text(
-                  'Client: ${order.customerName}',
-                  style: TextStyle(
-                    color: Colors.grey[600],
-                    fontSize: 14,
-                  ),
-                ),
-              ],
-              const SizedBox(height: 12),
-              const Text(
-                'Articles:',
+              const SizedBox(height: 4),
+              Text(
+                'Quantité: ${quote.quantity}',
                 style: TextStyle(
-                  fontWeight: FontWeight.bold,
+                  color: Colors.grey[600],
                   fontSize: 14,
                 ),
               ),
-              const SizedBox(height: 8),
-              ...order.items.map((item) {
-                try {
-                  return Padding(
-                    padding: const EdgeInsets.only(left: 8, bottom: 4),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Expanded(
-                          child: Text(
-                            '${item.name} x${item.quantity}',
-                            style: const TextStyle(fontSize: 14),
-                          ),
-                        ),
-                        Text(
-                          '${(item.price * item.quantity).toStringAsFixed(2)}€',
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: Colors.blue,
-                          ),
-                        ),
-                      ],
+              const SizedBox(height: 4),
+              Text(
+                'Prix unitaire: ${quote.unitPrice.toStringAsFixed(2)}€',
+                style: TextStyle(
+                  color: Colors.grey[600],
+                  fontSize: 14,
+                ),
+              ),
+              if (quote.description.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    'Description: ${quote.description}',
+                    style: TextStyle(
+                      color: Colors.grey[700],
+                      fontSize: 12,
                     ),
-                  );
-                } catch (e) {
-                  return Container(
-                    padding: const EdgeInsets.only(left: 8, bottom: 4),
-                    child: Text(
-                      'Article avec erreur',
-                      style: TextStyle(
-                        color: Colors.red.shade600,
-                        fontSize: 12,
-                      ),
-                    ),
-                  );
-                }
-              }),
+                  ),
+                ),
+              ],
               const Divider(height: 16),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -461,11 +354,11 @@ class OrderCard extends StatelessWidget {
                     ),
                   ),
                   Text(
-                    '${order.total.toStringAsFixed(2)}€',
+                    '${quote.total.toStringAsFixed(2)}€',
                     style: const TextStyle(
                       fontWeight: FontWeight.bold,
-                      fontSize: 16,
-                      color: Colors.blue,
+                      fontSize: 18,
+                      color: Colors.green,
                     ),
                   ),
                 ],
@@ -475,7 +368,7 @@ class OrderCard extends StatelessWidget {
         ),
       );
     } catch (e) {
-      print('Erreur lors de l\'affichage de la commande ${order.id}: $e');
+      print('Erreur lors de l\'affichage du devis: $e');
       return Container(
         margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         padding: const EdgeInsets.all(16),
@@ -485,7 +378,7 @@ class OrderCard extends StatelessWidget {
           border: Border.all(color: Colors.red.shade200),
         ),
         child: Text(
-          'Erreur d\'affichage de cette commande',
+          'Erreur d\'affichage de ce devis',
           style: TextStyle(color: Colors.red.shade700),
         ),
       );

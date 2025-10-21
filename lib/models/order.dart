@@ -38,9 +38,9 @@ class OrderItem {
   // Factory depuis Map
   factory OrderItem.fromMap(Map<String, dynamic> map) {
     return OrderItem(
-      name: map['name'] ?? '',
-      price: map['price'] ?? 0.0,
-      quantity: map['quantity'] ?? 0,
+      name: map['name']?.toString() ?? '',
+      price: (map['price'] as num?)?.toDouble() ?? 0.0,
+      quantity: (map['quantity'] as num?)?.toInt() ?? 0,
     );
   }
 }
@@ -93,14 +93,28 @@ class Order {
 
   // Factory depuis Map
   factory Order.fromMap(Map<String, dynamic> map) {
+    // Gestion sécurisée de la date
+    DateTime orderDate;
+    try {
+      final dateStr = map['date'];
+      if (dateStr == null || dateStr.toString().isEmpty) {
+        orderDate = DateTime.now();
+      } else {
+        orderDate = DateTime.parse(dateStr.toString());
+      }
+    } catch (e) {
+      print('Erreur lors du parsing de la date: $e');
+      orderDate = DateTime.now();
+    }
+
     return Order(
       id: map['id'] ?? '',
       items: (map['items'] as List<dynamic>?)
           ?.map((item) => OrderItem.fromMap(item as Map<String, dynamic>))
           .toList() ?? [],
-      total: map['total'] ?? 0.0,
-      date: DateTime.parse(map['date'] ?? DateTime.now().toIso8601String()),
-      customerName: map['customerName'],
+      total: (map['total'] as num?)?.toDouble() ?? 0.0,
+      date: orderDate,
+      customerName: map['customerName'] as String?,
     );
   }
 }

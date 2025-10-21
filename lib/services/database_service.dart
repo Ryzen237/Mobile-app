@@ -2,9 +2,11 @@ import 'package:sqflite/sqflite.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart';
 import 'dart:io';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/quote.dart';
 import '../models/order.dart';
 import '../models/user.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 
 class DatabaseService {
   static final DatabaseService _instance = DatabaseService._internal();
@@ -12,22 +14,48 @@ class DatabaseService {
   DatabaseService._internal();
 
   Database? _database;
+  SharedPreferences? _prefs;
 
   Future<Database> get database async {
     if (_database != null) return _database!;
+
+    if (isWeb) {
+      // For web, we'll use a mock database that doesn't actually persist
+      // In a real app, you'd use a web-compatible storage solution
+      throw UnsupportedError('Database not supported on web platform');
+    }
+
     _database = await _initDatabase();
     return _database!;
   }
 
-  Future<Database> _initDatabase() async {
-    Directory documentsDirectory = await getApplicationDocumentsDirectory();
-    String path = join(documentsDirectory.path, 'quote_order_app.db');
+  // Safe database access method
+  Future<Database?> getDatabaseSafe() async {
+    try {
+      return await database;
+    } catch (e) {
+      print('Erreur d\'accès à la base de données: $e');
+      return null;
+    }
+  }
 
-    return await openDatabase(
-      path,
-      version: 1,
-      onCreate: _onCreate,
-    );
+  // Platform detection method
+  bool get isWeb => kIsWeb;
+
+  Future<Database> _initDatabase() async {
+    try {
+      Directory documentsDirectory = await getApplicationDocumentsDirectory();
+      String path = join(documentsDirectory.path, 'quote_order_app.db');
+
+      return await openDatabase(
+        path,
+        version: 1,
+        onCreate: _onCreate,
+      );
+    } catch (e) {
+      print('Erreur lors de l\'initialisation de la base de données: $e');
+      throw UnsupportedError('Database initialization failed: $e');
+    }
   }
 
   Future _onCreate(Database db, int version) async {
@@ -311,14 +339,35 @@ class DatabaseService {
       final orders = <Order>[];
 
       for (var map in maps) {
-        final items = await getOrderItems(map['id'] as String);
-        orders.add(Order(
-          id: map['id'] as String,
-          items: items,
-          total: map['total'] as double,
-          date: DateTime.parse(map['date'] as String),
-          customerName: map['customer_name'] as String?,
-        ));
+        try {
+          final orderId = map['id'] as String?;
+          if (orderId == null || orderId.isEmpty) continue;
+
+          final items = await getOrderItems(orderId);
+
+          // Gestion sécurisée de la date
+          DateTime orderDate;
+          try {
+            final dateStr = map['date'] as String?;
+            orderDate = dateStr != null && dateStr.isNotEmpty
+                ? DateTime.parse(dateStr)
+                : DateTime.now();
+          } catch (e) {
+            print('Erreur de date pour la commande $orderId: $e');
+            orderDate = DateTime.now();
+          }
+
+          orders.add(Order(
+            id: orderId,
+            items: items,
+            total: (map['total'] as num?)?.toDouble() ?? 0.0,
+            date: orderDate,
+            customerName: map['customer_name'] as String?,
+          ));
+        } catch (e) {
+          print('Erreur lors du traitement de la commande ${map['id']}: $e');
+          continue; // Skip this order and continue with others
+        }
       }
 
       return orders;
@@ -336,14 +385,35 @@ class DatabaseService {
       final orders = <Order>[];
 
       for (var map in maps) {
-        final items = await getOrderItems(map['id'] as String);
-        orders.add(Order(
-          id: map['id'] as String,
-          items: items,
-          total: map['total'] as double,
-          date: DateTime.parse(map['date'] as String),
-          customerName: map['customer_name'] as String?,
-        ));
+        try {
+          final orderId = map['id'] as String?;
+          if (orderId == null || orderId.isEmpty) continue;
+
+          final items = await getOrderItems(orderId);
+
+          // Gestion sécurisée de la date
+          DateTime orderDate;
+          try {
+            final dateStr = map['date'] as String?;
+            orderDate = dateStr != null && dateStr.isNotEmpty
+                ? DateTime.parse(dateStr)
+                : DateTime.now();
+          } catch (e) {
+            print('Erreur de date pour la commande $orderId: $e');
+            orderDate = DateTime.now();
+          }
+
+          orders.add(Order(
+            id: orderId,
+            items: items,
+            total: (map['total'] as num?)?.toDouble() ?? 0.0,
+            date: orderDate,
+            customerName: map['customer_name'] as String?,
+          ));
+        } catch (e) {
+          print('Erreur lors du traitement de la commande ${map['id']}: $e');
+          continue; // Skip this order and continue with others
+        }
       }
 
       return orders;
@@ -363,9 +433,9 @@ class DatabaseService {
       );
 
       return maps.map((map) => OrderItem(
-        name: map['name'] as String,
-        price: map['price'] as double,
-        quantity: map['quantity'] as int,
+        name: map['name']?.toString() ?? '',
+        price: (map['price'] as num?)?.toDouble() ?? 0.0,
+        quantity: (map['quantity'] as num?)?.toInt() ?? 0,
       )).toList();
     } catch (e) {
       print('Erreur lors de la récupération des éléments de commande: $e');

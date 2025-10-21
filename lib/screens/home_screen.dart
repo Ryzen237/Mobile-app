@@ -4,6 +4,7 @@ import '../providers/app_state.dart';
 import 'quote_screen.dart';
 import 'order_screen.dart';
 import 'orders_list_screen.dart';
+import 'quotes_list_screen.dart';
 import 'login_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -17,10 +18,18 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
-    // Load user data after the first frame to avoid setState during build
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    // Initialize app state after the first frame to avoid setState during build
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
       final appState = Provider.of<AppState>(context, listen: false);
-      appState.loadUserData();
+
+      // Initialize the app if not already done
+      if (appState.currentUser == null) {
+        print('Initialisation de l\'application...');
+        await appState.initialize();
+      } else {
+        print('Utilisateur déjà défini, chargement des données...');
+        await appState.loadUserData();
+      }
     });
   }
 
@@ -112,7 +121,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 Navigator.pop(context);
                 Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (context) => const QuoteScreen()),
+                  MaterialPageRoute(builder: (context) => const QuotesListScreen()),
                 );
               },
             ),

@@ -99,7 +99,7 @@ class OrderService {
 
   // Méthode pour formater le prix
   String formatPrice(double price) {
-    return '${price.toStringAsFixed(2)}€';
+    return '${price.toStringAsFixed(2)}FCFA';
   }
 
   // Méthode pour générer un ID de commande unique

@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/app_state.dart';
 import '../services/database_service.dart';
+import '../services/storage_service.dart';
 import '../models/user.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'register_screen.dart';
 import 'home_screen.dart';
 
@@ -34,32 +36,50 @@ class _LoginScreenState extends State<LoginScreen> {
 
     try {
       final appState = Provider.of<AppState>(context, listen: false);
-      final dbService = DatabaseService();
 
-      // Simulation de connexion (en production, vérifier le mot de passe hashé)
-      final user = await dbService.getUserByEmail(_emailController.text.trim());
+      if (kIsWeb) {
+        // For web, use StorageService
+        final storageService = StorageService();
+        final user = await storageService.getUserByEmail(_emailController.text.trim());
 
-      if (user != null) {
-        // Connexion réussie
-        appState.setCurrentUser(user);
-
-        if (mounted) {
-          Navigator.of(context).pushReplacement(
-            MaterialPageRoute(builder: (context) => const HomeScreen()),
-          );
-        }
-      } else {
-        // Utilisateur non trouvé - créer un compte de démonstration
-        final demoUser = await _createDemoUser();
-        if (demoUser != null) {
-          appState.setCurrentUser(demoUser);
-
-          if (mounted) {
-            Navigator.of(context).pushReplacement(
-              MaterialPageRoute(builder: (context) => const HomeScreen()),
-            );
+        if (user != null) {
+          appState.setCurrentUser(user);
+        } else {
+          // Create demo user for web
+          final demoUser = await _createDemoUser();
+          if (demoUser != null) {
+            appState.setCurrentUser(demoUser);
           }
         }
+      } else {
+        // For mobile, use DatabaseService
+        try {
+          final dbService = DatabaseService();
+          final user = await dbService.getUserByEmail(_emailController.text.trim());
+
+          if (user != null) {
+            appState.setCurrentUser(user);
+          } else {
+            // Create demo user for mobile
+            final demoUser = await _createDemoUser();
+            if (demoUser != null) {
+              appState.setCurrentUser(demoUser);
+            }
+          }
+        } catch (e) {
+          print('Erreur base de données mobile: $e');
+          // Fallback to demo user creation
+          final demoUser = await _createDemoUser();
+          if (demoUser != null) {
+            appState.setCurrentUser(demoUser);
+          }
+        }
+      }
+
+      if (appState.currentUser != null && mounted) {
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (context) => const HomeScreen()),
+        );
       }
     } catch (e) {
       if (mounted) {
@@ -76,7 +96,6 @@ class _LoginScreenState extends State<LoginScreen> {
 
   Future<User?> _createDemoUser() async {
     try {
-      final dbService = DatabaseService();
       final demoUser = User(
         id: 'USER_${DateTime.now().millisecondsSinceEpoch}',
         name: _emailController.text.split('@')[0],
@@ -84,8 +103,19 @@ class _LoginScreenState extends State<LoginScreen> {
         createdAt: DateTime.now(),
       );
 
-      final insertedUser = await dbService.insertUser(demoUser);
-      return insertedUser;
+      if (kIsWeb) {
+        final storageService = StorageService();
+        return await storageService.insertUser(demoUser);
+      } else {
+        try {
+          final dbService = DatabaseService();
+          return await dbService.insertUser(demoUser);
+        } catch (e) {
+          print('Erreur base de données mobile: $e');
+          // Return the user even if database insertion fails
+          return demoUser;
+        }
+      }
     } catch (e) {
       print('Erreur lors de la création du compte de démonstration: $e');
       return null;
